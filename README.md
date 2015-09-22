@@ -7,12 +7,11 @@ A scanner for aws resources. You can use the discovery package to get a channel 
 
 ```go
 import (
-        "github.com/opsee/awscan/scanner"
-        "github.com/opsee/awscan/discovery"
+        "github.com/opsee/awscan"
 )
 
-scanner := scanner.NewScanner(&scanner.Config{AccessKeyId: "YOURID", SecretKey: "YOURSECRET", Region: "us-west-1"})
-disco := discovery.NewDiscoverer(scanner)
+scanner := awscan.NewScanner(&awscan.Config{AccessKeyId: "YOURID", SecretKey: "YOURSECRET", Region: "us-west-1"})
+disco := awscan.NewDiscoverer(scanner)
 
 for event := range disco.Discover() {
 	if event.Err != nil {

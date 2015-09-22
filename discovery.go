@@ -1,9 +1,7 @@
-package discovery
+package awscan
 
 import (
 	"sync"
-
-	"github.com/opsee/awscan/scanner"
 )
 
 type Discoverer interface {
