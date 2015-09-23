@@ -15,11 +15,11 @@ type Event struct {
 
 type discoverer struct {
 	wg        *sync.WaitGroup
-	sc        scanner.EC2Scanner
+	sc        EC2Scanner
 	discoChan chan Event
 }
 
-func NewDiscoverer(s scanner.EC2Scanner) Discoverer {
+func NewDiscoverer(s EC2Scanner) Discoverer {
 	disco := &discoverer{
 		sc:        s,
 		wg:        &sync.WaitGroup{},

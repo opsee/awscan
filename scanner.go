@@ -2,7 +2,6 @@ package awscan
 
 import (
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
