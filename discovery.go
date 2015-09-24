@@ -14,21 +14,23 @@ type Event struct {
 }
 
 type discoverer struct {
-	wg        sync.WaitGroup
+	wg        *sync.WaitGroup
 	sc        EC2Scanner
 	discoChan chan Event
 }
 
 func NewDiscoverer(s EC2Scanner) Discoverer {
-	disco := discoverer{
+	disco := &discoverer{
 		sc:        s,
-		wg:        sync.WaitGroup{},
+		wg:        &sync.WaitGroup{},
 		discoChan: make(chan Event, 128),
 	}
+
 	return disco
 }
 
-func (d discoverer) Discover() <-chan Event {
+func (d *discoverer) Discover() <-chan Event {
+
 	d.wg.Add(4)
 
 	go d.scanLoadBalancers()
@@ -38,7 +40,7 @@ func (d discoverer) Discover() <-chan Event {
 
 	go func() {
 		d.wg.Wait()
-		defer close(d.discoChan)
+		close(d.discoChan)
 	}()
 
 	return d.discoChan
@@ -69,7 +71,7 @@ func (d *discoverer) scanSecurityGroups() {
 			}
 		}
 	}
-	defer d.wg.Done()
+	d.wg.Done()
 }
 
 func (d *discoverer) scanLoadBalancers() {
@@ -82,7 +84,7 @@ func (d *discoverer) scanLoadBalancers() {
 			}
 		}
 	}
-	defer d.wg.Done()
+	d.wg.Done()
 }
 
 func (d *discoverer) scanRDS() {
@@ -95,7 +97,7 @@ func (d *discoverer) scanRDS() {
 			}
 		}
 	}
-	defer d.wg.Done()
+	d.wg.Done()
 }
 
 func (d *discoverer) scanRDSSecurityGroups() {
@@ -108,5 +110,5 @@ func (d *discoverer) scanRDSSecurityGroups() {
 			}
 		}
 	}
-	defer d.wg.Done()
+	d.wg.Done()
 }
