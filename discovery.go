@@ -14,34 +14,37 @@ type Event struct {
 }
 
 type discoverer struct {
-	wg        *sync.WaitGroup
+	wg        sync.WaitGroup
 	sc        EC2Scanner
 	discoChan chan Event
 }
 
 func NewDiscoverer(s EC2Scanner) Discoverer {
-	disco := &discoverer{
+	disco := discoverer{
 		sc:        s,
-		wg:        &sync.WaitGroup{},
+		wg:        sync.WaitGroup{},
 		discoChan: make(chan Event, 128),
 	}
 	return disco
 }
 
-func (d *discoverer) Discover() <-chan Event {
+func (d discoverer) Discover() <-chan Event {
+	d.wg.Add(4)
+
 	go d.scanLoadBalancers()
 	go d.scanRDS()
 	go d.scanRDSSecurityGroups()
 	go d.scanSecurityGroups()
+
 	go func() {
 		d.wg.Wait()
-		close(d.discoChan)
+		defer close(d.discoChan)
 	}()
+
 	return d.discoChan
 }
 
 func (d *discoverer) scanSecurityGroups() {
-	d.wg.Add(1)
 	if sgs, err := d.sc.ScanSecurityGroups(); err != nil {
 		d.discoChan <- Event{nil, err}
 	} else {
@@ -66,11 +69,10 @@ func (d *discoverer) scanSecurityGroups() {
 			}
 		}
 	}
-	d.wg.Done()
+	defer d.wg.Done()
 }
 
 func (d *discoverer) scanLoadBalancers() {
-	d.wg.Add(1)
 	if lbs, err := d.sc.ScanLoadBalancers(); err != nil {
 		d.discoChan <- Event{nil, err}
 	} else {
@@ -80,11 +82,10 @@ func (d *discoverer) scanLoadBalancers() {
 			}
 		}
 	}
-	d.wg.Done()
+	defer d.wg.Done()
 }
 
 func (d *discoverer) scanRDS() {
-	d.wg.Add(1)
 	if rdses, err := d.sc.ScanRDS(); err != nil {
 		d.discoChan <- Event{nil, err}
 	} else {
@@ -94,11 +95,10 @@ func (d *discoverer) scanRDS() {
 			}
 		}
 	}
-	d.wg.Done()
+	defer d.wg.Done()
 }
 
 func (d *discoverer) scanRDSSecurityGroups() {
-	d.wg.Add(1)
 	if rdssgs, err := d.sc.ScanRDSSecurityGroups(); err != nil {
 		d.discoChan <- Event{nil, err}
 	} else {
@@ -108,5 +108,5 @@ func (d *discoverer) scanRDSSecurityGroups() {
 			}
 		}
 	}
-	d.wg.Done()
+	defer d.wg.Done()
 }
