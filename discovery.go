@@ -29,19 +29,24 @@ func NewDiscoverer(s EC2Scanner) Discoverer {
 	return disco
 }
 
+func (d *discoverer) doScan(scan func()) {
+	d.wg.Add(1)
+	go func() {
+		scan()
+		d.wg.Done()
+	}()
+}
+
 func (d *discoverer) Discover() <-chan Event {
 
-	d.wg.Add(4)
+	d.doScan(d.scanLoadBalancers)
+	d.doScan(d.scanRDS)
+	d.doScan(d.scanRDSSecurityGroups)
+	d.doScan(d.scanSecurityGroups)
+	d.doScan(d.scanAutoScalingGroups)
 
-	go d.scanLoadBalancers()
-	go d.scanRDS()
-	go d.scanRDSSecurityGroups()
-	go d.scanSecurityGroups()
-
-	go func() {
-		d.wg.Wait()
-		close(d.discoChan)
-	}()
+	d.wg.Wait()
+	close(d.discoChan)
 
 	return d.discoChan
 }
@@ -71,7 +76,6 @@ func (d *discoverer) scanSecurityGroups() {
 			}
 		}
 	}
-	d.wg.Done()
 }
 
 func (d *discoverer) scanLoadBalancers() {
@@ -84,7 +88,6 @@ func (d *discoverer) scanLoadBalancers() {
 			}
 		}
 	}
-	d.wg.Done()
 }
 
 func (d *discoverer) scanRDS() {
@@ -97,7 +100,6 @@ func (d *discoverer) scanRDS() {
 			}
 		}
 	}
-	d.wg.Done()
 }
 
 func (d *discoverer) scanRDSSecurityGroups() {
@@ -110,5 +112,17 @@ func (d *discoverer) scanRDSSecurityGroups() {
 			}
 		}
 	}
-	d.wg.Done()
+}
+
+// XXX pages and *DescribeAutoScalingGroupsOutput
+func (d *discoverer) scanAutoScalingGroups() {
+	if asgs, err := d.sc.ScanAutoScalingGroups(); err != nil {
+		d.discoChan <- Event{nil, err}
+	} else {
+		for _, asg := range asgs {
+			if asg != nil {
+				d.discoChan <- Event{asg, nil}
+			}
+		}
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
+	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/rds"
@@ -20,6 +21,7 @@ type EC2Scanner interface {
 	ScanLoadBalancers() ([]*elb.LoadBalancerDescription, error)
 	ScanRDS() ([]*rds.DBInstance, error)
 	ScanRDSSecurityGroups() ([]*rds.DBSecurityGroup, error)
+	ScanAutoScalingGroups() ([]*autoscaling.Group, error)
 }
 
 type eC2ScannerImpl struct {
@@ -28,8 +30,8 @@ type eC2ScannerImpl struct {
 
 type Config struct {
 	AccessKeyId string
-	SecretKey string
-	Region string
+	SecretKey   string
+	Region      string
 }
 
 func NewScanner(cfg *Config) EC2Scanner {
@@ -47,6 +49,7 @@ func NewScanner(cfg *Config) EC2Scanner {
 	scanner := &eC2ScannerImpl{
 		config: config,
 	}
+
 	return scanner
 }
 
@@ -64,6 +67,10 @@ func (s *eC2ScannerImpl) getELBClient() *elb.ELB {
 
 func (s *eC2ScannerImpl) getRDSClient() *rds.RDS {
 	return rds.New(s.getConfig())
+}
+
+func (s *eC2ScannerImpl) getAutoScalingClient() *autoscaling.AutoScaling {
+	return autoscaling.New(s.getConfig())
 }
 
 func (s *eC2ScannerImpl) GetInstance(instanceId string) (*ec2.Reservation, error) {
@@ -141,4 +148,16 @@ func (s *eC2ScannerImpl) ScanRDSSecurityGroups() ([]*rds.DBSecurityGroup, error)
 		return nil, err
 	}
 	return resp.DBSecurityGroups, nil
+}
+
+func (s *eC2ScannerImpl) ScanAutoScalingGroups() ([]*autoscaling.Group, error) {
+	client := s.getAutoScalingClient()
+
+	resp, err := client.DescribeAutoScalingGroups(nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.AutoScalingGroups, nil
 }
