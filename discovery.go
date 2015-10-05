@@ -13,44 +13,68 @@ type Event struct {
 	Err    error
 }
 
+type DiscoveryError struct {
+	err  error
+	Type string
+}
+
 type discoverer struct {
 	wg        *sync.WaitGroup
-	sc        scanner.EC2Scanner
+	sc        EC2Scanner
 	discoChan chan Event
 }
 
-func NewDiscoverer(s scanner.EC2Scanner) Discoverer {
+const (
+	InstanceType         = "Instance"
+	DBInstanceType       = "DBInstance"
+	SecurityGroupType    = "SecurityGroup"
+	DBSecurityGroupType  = "DBSecurityGroup"
+	AutoScalingGroupType = "AutoScalingGroup"
+	LoadBalancerType     = "LoadBalancerDescription"
+)
+
+func NewDiscoverer(s EC2Scanner) Discoverer {
 	disco := &discoverer{
 		sc:        s,
 		wg:        &sync.WaitGroup{},
 		discoChan: make(chan Event, 128),
 	}
+
 	return disco
 }
 
-func (d *discoverer) Discover() <-chan Event {
-	go d.scanLoadBalancers()
-	go d.scanRDS()
-	go d.scanRDSSecurityGroups()
-	go d.scanSecurityGroups()
+func (d *discoverer) doScan(scan func()) {
+	d.wg.Add(1)
 	go func() {
-		d.wg.Wait()
-		close(d.discoChan)
+		scan()
+		d.wg.Done()
 	}()
+}
+
+func (d *discoverer) Discover() <-chan Event {
+
+	d.doScan(d.scanLoadBalancers)
+	d.doScan(d.scanRDS)
+	d.doScan(d.scanRDSSecurityGroups)
+	d.doScan(d.scanSecurityGroups)
+	d.doScan(d.scanAutoScalingGroups)
+
+	d.wg.Wait()
+	close(d.discoChan)
+
 	return d.discoChan
 }
 
 func (d *discoverer) scanSecurityGroups() {
-	d.wg.Add(1)
 	if sgs, err := d.sc.ScanSecurityGroups(); err != nil {
-		d.discoChan <- Event{nil, err}
+		d.discoChan <- Event{nil, &DiscoveryError{err, SecurityGroupType}}
 	} else {
 		for _, sg := range sgs {
 			if sg != nil {
 				d.discoChan <- Event{sg, nil}
 				if sg.GroupId != nil {
 					if reservations, err := d.sc.ScanSecurityGroupInstances(*sg.GroupId); err != nil {
-						d.discoChan <- Event{nil, err}
+						d.discoChan <- Event{nil, &DiscoveryError{err, InstanceType}}
 					} else {
 						for _, reservation := range reservations {
 							if reservation != nil {
@@ -66,13 +90,11 @@ func (d *discoverer) scanSecurityGroups() {
 			}
 		}
 	}
-	d.wg.Done()
 }
 
 func (d *discoverer) scanLoadBalancers() {
-	d.wg.Add(1)
 	if lbs, err := d.sc.ScanLoadBalancers(); err != nil {
-		d.discoChan <- Event{nil, err}
+		d.discoChan <- Event{nil, &DiscoveryError{err, LoadBalancerType}}
 	} else {
 		for _, lb := range lbs {
 			if lb != nil {
@@ -80,13 +102,11 @@ func (d *discoverer) scanLoadBalancers() {
 			}
 		}
 	}
-	d.wg.Done()
 }
 
 func (d *discoverer) scanRDS() {
-	d.wg.Add(1)
 	if rdses, err := d.sc.ScanRDS(); err != nil {
-		d.discoChan <- Event{nil, err}
+		d.discoChan <- Event{nil, &DiscoveryError{err, DBInstanceType}}
 	} else {
 		for _, rdsInst := range rdses {
 			if rdsInst != nil {
@@ -94,13 +114,11 @@ func (d *discoverer) scanRDS() {
 			}
 		}
 	}
-	d.wg.Done()
 }
 
 func (d *discoverer) scanRDSSecurityGroups() {
-	d.wg.Add(1)
 	if rdssgs, err := d.sc.ScanRDSSecurityGroups(); err != nil {
-		d.discoChan <- Event{nil, err}
+		d.discoChan <- Event{nil, &DiscoveryError{err, DBSecurityGroupType}}
 	} else {
 		for _, rdssg := range rdssgs {
 			if rdssg != nil {
@@ -108,5 +126,21 @@ func (d *discoverer) scanRDSSecurityGroups() {
 			}
 		}
 	}
-	d.wg.Done()
+}
+
+// XXX pages and *DescribeAutoScalingGroupsOutput
+func (d *discoverer) scanAutoScalingGroups() {
+	if asgs, err := d.sc.ScanAutoScalingGroups(); err != nil {
+		d.discoChan <- Event{nil, &DiscoveryError{err, AutoScalingGroupType}}
+	} else {
+		for _, asg := range asgs {
+			if asg != nil {
+				d.discoChan <- Event{asg, nil}
+			}
+		}
+	}
+}
+
+func (e *DiscoveryError) Error() string {
+	return e.err.Error()
 }

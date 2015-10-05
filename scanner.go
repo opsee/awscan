@@ -2,12 +2,12 @@ package awscan
 
 import (
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
+	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/rds"
@@ -21,6 +21,7 @@ type EC2Scanner interface {
 	ScanLoadBalancers() ([]*elb.LoadBalancerDescription, error)
 	ScanRDS() ([]*rds.DBInstance, error)
 	ScanRDSSecurityGroups() ([]*rds.DBSecurityGroup, error)
+	ScanAutoScalingGroups() ([]*autoscaling.Group, error)
 }
 
 type eC2ScannerImpl struct {
@@ -29,8 +30,8 @@ type eC2ScannerImpl struct {
 
 type Config struct {
 	AccessKeyId string
-	SecretKey string
-	Region string
+	SecretKey   string
+	Region      string
 }
 
 func NewScanner(cfg *Config) EC2Scanner {
@@ -44,10 +45,14 @@ func NewScanner(cfg *Config) EC2Scanner {
 			&credentials.EnvProvider{},
 			&ec2rolecreds.EC2RoleProvider{ExpiryWindow: 5 * time.Minute},
 		})
-	config := &aws.Config{Credentials: creds, Region: aws.String(cfg.Region)}
+
+	retries := new(int)
+	*retries = 11
+	config := &aws.Config{Credentials: creds, Region: aws.String(cfg.Region), MaxRetries: retries}
 	scanner := &eC2ScannerImpl{
 		config: config,
 	}
+
 	return scanner
 }
 
@@ -65,6 +70,10 @@ func (s *eC2ScannerImpl) getELBClient() *elb.ELB {
 
 func (s *eC2ScannerImpl) getRDSClient() *rds.RDS {
 	return rds.New(s.getConfig())
+}
+
+func (s *eC2ScannerImpl) getAutoScalingClient() *autoscaling.AutoScaling {
+	return autoscaling.New(s.getConfig())
 }
 
 func (s *eC2ScannerImpl) GetInstance(instanceId string) (*ec2.Reservation, error) {
@@ -95,13 +104,25 @@ func (s *eC2ScannerImpl) ScanSecurityGroups() ([]*ec2.SecurityGroup, error) {
 func (s *eC2ScannerImpl) ScanSecurityGroupInstances(groupId string) ([]*ec2.Reservation, error) {
 	client := s.getEC2Client()
 	var grs []*string = []*string{&groupId}
+	var reservations []*ec2.Reservation
+
 	filters := []*ec2.Filter{&ec2.Filter{Name: aws.String("instance.group-id"), Values: grs}}
-	resp, err := client.DescribeInstances(&ec2.DescribeInstancesInput{Filters: filters})
+
+	err := client.DescribeInstancesPages(&ec2.DescribeInstancesInput{Filters: filters}, func(resp *ec2.DescribeInstancesOutput, lastPage bool) bool {
+		for _, res := range resp.Reservations {
+			reservations = append(reservations, res)
+		}
+		if lastPage {
+			return false
+		}
+		return true
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	return resp.Reservations, nil
+	return reservations, nil
 }
 
 func (s *eC2ScannerImpl) GetLoadBalancer(elbId string) (*elb.LoadBalancerDescription, error) {
@@ -142,4 +163,26 @@ func (s *eC2ScannerImpl) ScanRDSSecurityGroups() ([]*rds.DBSecurityGroup, error)
 		return nil, err
 	}
 	return resp.DBSecurityGroups, nil
+}
+
+func (s *eC2ScannerImpl) ScanAutoScalingGroups() ([]*autoscaling.Group, error) {
+	client := s.getAutoScalingClient()
+
+	var asgs []*autoscaling.Group
+
+	err := client.DescribeAutoScalingGroupsPages(&autoscaling.DescribeAutoScalingGroupsInput{}, func(resp *autoscaling.DescribeAutoScalingGroupsOutput, lastPage bool) bool {
+		for _, asg := range resp.AutoScalingGroups {
+			asgs = append(asgs, asg)
+		}
+		if lastPage {
+			return false
+		}
+		return true
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return asgs, nil
 }
