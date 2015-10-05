@@ -128,7 +128,6 @@ func (d *discoverer) scanRDSSecurityGroups() {
 	}
 }
 
-// XXX pages and *DescribeAutoScalingGroupsOutput
 func (d *discoverer) scanAutoScalingGroups() {
 	if asgs, err := d.sc.ScanAutoScalingGroups(); err != nil {
 		d.discoChan <- Event{nil, &DiscoveryError{err, AutoScalingGroupType}}
