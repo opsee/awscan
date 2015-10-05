@@ -46,9 +46,7 @@ func NewScanner(cfg *Config) EC2Scanner {
 			&ec2rolecreds.EC2RoleProvider{ExpiryWindow: 5 * time.Minute},
 		})
 
-	retries := new(int)
-	*retries = 11
-	config := &aws.Config{Credentials: creds, Region: aws.String(cfg.Region), MaxRetries: retries}
+	config := &aws.Config{Credentials: creds, Region: aws.String(cfg.Region), MaxRetries: aws.Int(11)}
 	scanner := &eC2ScannerImpl{
 		config: config,
 	}
