@@ -45,7 +45,8 @@ func NewScanner(cfg *Config) EC2Scanner {
 			&credentials.EnvProvider{},
 			&ec2rolecreds.EC2RoleProvider{ExpiryWindow: 5 * time.Minute},
 		})
-	config := &aws.Config{Credentials: creds, Region: aws.String(cfg.Region)}
+
+	config := &aws.Config{Credentials: creds, Region: aws.String(cfg.Region), MaxRetries: aws.Int(11)}
 	scanner := &eC2ScannerImpl{
 		config: config,
 	}
@@ -101,13 +102,25 @@ func (s *eC2ScannerImpl) ScanSecurityGroups() ([]*ec2.SecurityGroup, error) {
 func (s *eC2ScannerImpl) ScanSecurityGroupInstances(groupId string) ([]*ec2.Reservation, error) {
 	client := s.getEC2Client()
 	var grs []*string = []*string{&groupId}
+	var reservations []*ec2.Reservation
+
 	filters := []*ec2.Filter{&ec2.Filter{Name: aws.String("instance.group-id"), Values: grs}}
-	resp, err := client.DescribeInstances(&ec2.DescribeInstancesInput{Filters: filters})
+
+	err := client.DescribeInstancesPages(&ec2.DescribeInstancesInput{Filters: filters}, func(resp *ec2.DescribeInstancesOutput, lastPage bool) bool {
+		for _, res := range resp.Reservations {
+			reservations = append(reservations, res)
+		}
+		if lastPage {
+			return false
+		}
+		return true
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	return resp.Reservations, nil
+	return reservations, nil
 }
 
 func (s *eC2ScannerImpl) GetLoadBalancer(elbId string) (*elb.LoadBalancerDescription, error) {
@@ -152,12 +165,21 @@ func (s *eC2ScannerImpl) ScanRDSSecurityGroups() ([]*rds.DBSecurityGroup, error)
 
 func (s *eC2ScannerImpl) ScanAutoScalingGroups() ([]*autoscaling.Group, error) {
 	client := s.getAutoScalingClient()
+	var asgs []*autoscaling.Group
 
-	resp, err := client.DescribeAutoScalingGroups(nil)
+	err := client.DescribeAutoScalingGroupsPages(&autoscaling.DescribeAutoScalingGroupsInput{}, func(resp *autoscaling.DescribeAutoScalingGroupsOutput, lastPage bool) bool {
+		for _, asg := range resp.AutoScalingGroups {
+			asgs = append(asgs, asg)
+		}
+		if lastPage {
+			return false
+		}
+		return true
+	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	return resp.AutoScalingGroups, nil
+	return asgs, nil
 }
