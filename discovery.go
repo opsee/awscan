@@ -35,9 +35,8 @@ const (
 
 func NewDiscoverer(s EC2Scanner) Discoverer {
 	disco := &discoverer{
-		sc:        s,
-		wg:        &sync.WaitGroup{},
-		discoChan: make(chan Event, 128),
+		sc: s,
+		wg: &sync.WaitGroup{},
 	}
 
 	return disco
@@ -52,6 +51,7 @@ func (d *discoverer) doScan(scan func()) {
 }
 
 func (d *discoverer) Discover() <-chan Event {
+	d.discoChan = make(chan Event, 128)
 
 	d.doScan(d.scanLoadBalancers)
 	d.doScan(d.scanRDS)
