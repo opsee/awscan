@@ -2,11 +2,9 @@ package awscan
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elb"
@@ -25,7 +23,7 @@ type EC2Scanner interface {
 }
 
 type eC2ScannerImpl struct {
-	config *aws.Config
+	session *session.Session
 }
 
 type Config struct {
@@ -34,44 +32,30 @@ type Config struct {
 	Region      string
 }
 
-func NewScanner(cfg *Config) EC2Scanner {
-	var creds = credentials.NewChainCredentials(
-		[]credentials.Provider{
-			&credentials.StaticProvider{Value: credentials.Value{
-				AccessKeyID:     cfg.AccessKeyId,
-				SecretAccessKey: cfg.SecretKey,
-				SessionToken:    "",
-			}},
-			&credentials.EnvProvider{},
-			&ec2rolecreds.EC2RoleProvider{ExpiryWindow: 5 * time.Minute},
-		})
-
-	config := &aws.Config{Credentials: creds, Region: aws.String(cfg.Region), MaxRetries: aws.Int(11)}
-	scanner := &eC2ScannerImpl{
-		config: config,
+func NewScanner(sess *session.Session) EC2Scanner {
+	return &eC2ScannerImpl{
+		session: sess,
 	}
-
-	return scanner
 }
 
-func (s *eC2ScannerImpl) getConfig() *aws.Config {
-	return s.config
+func (s *eC2ScannerImpl) getSession() *session.Session {
+	return s.session
 }
 
 func (s *eC2ScannerImpl) getEC2Client() *ec2.EC2 {
-	return ec2.New(s.getConfig())
+	return ec2.New(s.getSession())
 }
 
 func (s *eC2ScannerImpl) getELBClient() *elb.ELB {
-	return elb.New(s.getConfig())
+	return elb.New(s.getSession())
 }
 
 func (s *eC2ScannerImpl) getRDSClient() *rds.RDS {
-	return rds.New(s.getConfig())
+	return rds.New(s.getSession())
 }
 
 func (s *eC2ScannerImpl) getAutoScalingClient() *autoscaling.AutoScaling {
-	return autoscaling.New(s.getConfig())
+	return autoscaling.New(s.getSession())
 }
 
 func (s *eC2ScannerImpl) GetInstance(instanceId string) (*ec2.Reservation, error) {
