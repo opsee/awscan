@@ -26,12 +26,6 @@ type eC2ScannerImpl struct {
 	session *session.Session
 }
 
-type Config struct {
-	AccessKeyId string
-	SecretKey   string
-	Region      string
-}
-
 func NewScanner(sess *session.Session) EC2Scanner {
 	return &eC2ScannerImpl{
 		session: sess,
