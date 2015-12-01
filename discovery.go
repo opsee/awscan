@@ -59,8 +59,10 @@ func (d *discoverer) Discover() <-chan Event {
 	d.doScan(d.scanSecurityGroups)
 	d.doScan(d.scanAutoScalingGroups)
 
-	d.wg.Wait()
-	close(d.discoChan)
+	go func() {
+		d.wg.Wait()
+		close(d.discoChan)
+	}()
 
 	return d.discoChan
 }
