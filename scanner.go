@@ -20,15 +20,19 @@ type EC2Scanner interface {
 	ScanRDS() ([]*rds.DBInstance, error)
 	ScanRDSSecurityGroups() ([]*rds.DBSecurityGroup, error)
 	ScanAutoScalingGroups() ([]*autoscaling.Group, error)
+	ScanRouteTables() ([]*ec2.RouteTable, error)
+	ScanSubnets() ([]*ec2.Subnet, error)
 }
 
 type eC2ScannerImpl struct {
 	session *session.Session
+	vpcID   *string
 }
 
-func NewScanner(sess *session.Session) EC2Scanner {
+func NewScanner(sess *session.Session, vpcID string) EC2Scanner {
 	return &eC2ScannerImpl{
 		session: sess,
+		vpcID:   aws.String(vpcID),
 	}
 }
 
@@ -54,7 +58,15 @@ func (s *eC2ScannerImpl) getAutoScalingClient() *autoscaling.AutoScaling {
 
 func (s *eC2ScannerImpl) GetInstance(instanceId string) (*ec2.Reservation, error) {
 	client := s.getEC2Client()
-	resp, err := client.DescribeInstances(&ec2.DescribeInstancesInput{InstanceIds: []*string{&instanceId}})
+	resp, err := client.DescribeInstances(&ec2.DescribeInstancesInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: []*string{s.vpcID},
+			},
+		},
+		InstanceIds: []*string{&instanceId},
+	})
 	if err != nil {
 		if len(resp.Reservations) > 1 {
 			return nil, fmt.Errorf("Received multiple reservations for instance id: %v, %v", instanceId, resp)
@@ -70,7 +82,14 @@ func (s *eC2ScannerImpl) GetInstance(instanceId string) (*ec2.Reservation, error
 
 func (s *eC2ScannerImpl) ScanSecurityGroups() ([]*ec2.SecurityGroup, error) {
 	client := s.getEC2Client()
-	resp, err := client.DescribeSecurityGroups(nil)
+	resp, err := client.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: []*string{s.vpcID},
+			},
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +101,16 @@ func (s *eC2ScannerImpl) ScanSecurityGroupInstances(groupId string) ([]*ec2.Rese
 	var grs []*string = []*string{&groupId}
 	var reservations []*ec2.Reservation
 
-	filters := []*ec2.Filter{&ec2.Filter{Name: aws.String("instance.group-id"), Values: grs}}
+	filters := []*ec2.Filter{
+		{
+			Name:   aws.String("vpc-id"),
+			Values: []*string{s.vpcID},
+		},
+		{
+			Name:   aws.String("instance.group-id"),
+			Values: grs,
+		},
+	}
 
 	err := client.DescribeInstancesPages(&ec2.DescribeInstancesInput{Filters: filters}, func(resp *ec2.DescribeInstancesOutput, lastPage bool) bool {
 		for _, res := range resp.Reservations {
@@ -106,21 +134,36 @@ func (s *eC2ScannerImpl) GetLoadBalancer(elbId string) (*elb.LoadBalancerDescrip
 	input := &elb.DescribeLoadBalancersInput{
 		LoadBalancerNames: []*string{aws.String(elbId)},
 	}
+
 	resp, err := client.DescribeLoadBalancers(input)
 	if err != nil {
 		return nil, err
 	}
 
-	return resp.LoadBalancerDescriptions[0], nil
+	elb := resp.LoadBalancerDescriptions[0]
+	if aws.StringValue(elb.VPCId) != aws.StringValue(s.vpcID) {
+		return nil, fmt.Errorf("LoadBalancer not found with vpc id = %s", aws.StringValue(s.vpcID))
+	}
+
+	return elb, nil
 }
 
 func (s *eC2ScannerImpl) ScanLoadBalancers() ([]*elb.LoadBalancerDescription, error) {
 	client := s.getELBClient()
+	var elbs []*elb.LoadBalancerDescription
+
 	resp, err := client.DescribeLoadBalancers(nil)
 	if err != nil {
 		return nil, err
 	}
-	return resp.LoadBalancerDescriptions, nil
+
+	for _, elb := range resp.LoadBalancerDescriptions {
+		if aws.StringValue(elb.VPCId) == aws.StringValue(s.vpcID) {
+			elbs = append(elbs, elb)
+		}
+	}
+
+	return elbs, nil
 }
 
 func (s *eC2ScannerImpl) ScanRDS() ([]*rds.DBInstance, error) {
@@ -160,4 +203,40 @@ func (s *eC2ScannerImpl) ScanAutoScalingGroups() ([]*autoscaling.Group, error) {
 	}
 
 	return asgs, nil
+}
+
+func (s *eC2ScannerImpl) ScanRouteTables() ([]*ec2.RouteTable, error) {
+	client := s.getEC2Client()
+	resp, err := client.DescribeRouteTables(&ec2.DescribeRouteTablesInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: []*string{s.vpcID},
+			},
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.RouteTables, nil
+}
+
+func (s *eC2ScannerImpl) ScanSubnets() ([]*ec2.Subnet, error) {
+	client := s.getEC2Client()
+	resp, err := client.DescribeSubnets(&ec2.DescribeSubnetsInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: []*string{s.vpcID},
+			},
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Subnets, nil
 }
