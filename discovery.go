@@ -31,6 +31,8 @@ const (
 	DBSecurityGroupType  = "DBSecurityGroup"
 	AutoScalingGroupType = "AutoScalingGroup"
 	LoadBalancerType     = "LoadBalancerDescription"
+	SubnetType           = "Subnet"
+	RouteTableType       = "RouteTable"
 )
 
 func NewDiscoverer(s EC2Scanner) Discoverer {
@@ -53,6 +55,8 @@ func (d *discoverer) doScan(scan func()) {
 func (d *discoverer) Discover() <-chan Event {
 	d.discoChan = make(chan Event, 128)
 
+	d.doScan(d.scanRouteTables)
+	d.doScan(d.scanSubnets)
 	d.doScan(d.scanLoadBalancers)
 	d.doScan(d.scanRDS)
 	d.doScan(d.scanRDSSecurityGroups)
@@ -137,6 +141,30 @@ func (d *discoverer) scanAutoScalingGroups() {
 		for _, asg := range asgs {
 			if asg != nil {
 				d.discoChan <- Event{asg, nil}
+			}
+		}
+	}
+}
+
+func (d *discoverer) scanRouteTables() {
+	if rts, err := d.sc.ScanRouteTables(); err != nil {
+		d.discoChan <- Event{nil, &DiscoveryError{err, RouteTableType}}
+	} else {
+		for _, rt := range rts {
+			if rt != nil {
+				d.discoChan <- Event{rt, nil}
+			}
+		}
+	}
+}
+
+func (d *discoverer) scanSubnets() {
+	if subnets, err := d.sc.ScanSubnets(); err != nil {
+		d.discoChan <- Event{nil, &DiscoveryError{err, SubnetType}}
+	} else {
+		for _, subnet := range subnets {
+			if subnet != nil {
+				d.discoChan <- Event{subnet, nil}
 			}
 		}
 	}

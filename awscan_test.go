@@ -22,6 +22,8 @@ type testScanner struct {
 	dbInstances       []*rds.DBInstance
 	dbSecurityGroups  []*rds.DBSecurityGroup
 	autoscalingGroups []*autoscaling.Group
+	routeTables       []*ec2.RouteTable
+	subnets           []*ec2.Subnet
 }
 
 func TestDiscover(t *testing.T) {
@@ -42,6 +44,8 @@ func newTestScanner(t *testing.T) *testScanner {
 		dbInstances:       loadRdsInstances(t),
 		dbSecurityGroups:  loadRdsSecurityGroups(t),
 		autoscalingGroups: loadAutoScalingGroups(t),
+		routeTables:       loadRouteTables(t),
+		subnets:           loadSubnets(t),
 	}
 
 	t.Logf("reservations: %d", len(ts.reservations))
@@ -50,6 +54,8 @@ func newTestScanner(t *testing.T) *testScanner {
 	t.Logf("dbInstances: %d", len(ts.dbInstances))
 	t.Logf("dbSecurityGroups: %d", len(ts.dbSecurityGroups))
 	t.Logf("autoscalingGroups: %d", len(ts.autoscalingGroups))
+	t.Logf("routeTables: %d", len(ts.routeTables))
+	t.Logf("subnets: %d", len(ts.subnets))
 
 	return ts
 }
@@ -84,6 +90,14 @@ func (ts *testScanner) ScanRDSSecurityGroups() ([]*rds.DBSecurityGroup, error) {
 
 func (ts *testScanner) ScanAutoScalingGroups() ([]*autoscaling.Group, error) {
 	return ts.autoscalingGroups, nil
+}
+
+func (ts *testScanner) ScanRouteTables() ([]*ec2.RouteTable, error) {
+	return ts.routeTables, nil
+}
+
+func (ts *testScanner) ScanSubnets() ([]*ec2.Subnet, error) {
+	return ts.subnets, nil
 }
 
 func loadRdsSecurityGroups(t *testing.T) []*rds.DBSecurityGroup {
@@ -141,6 +155,26 @@ func loadReservations(t *testing.T) []*ec2.Reservation {
 
 	for i := 0; i < count; i++ {
 		c = append(c, &ec2.Reservation{})
+	}
+
+	return c
+}
+
+func loadRouteTables(t *testing.T) []*ec2.RouteTable {
+	c := make([]*ec2.RouteTable, count)
+
+	for i := 0; i < count; i++ {
+		c = append(c, &ec2.RouteTable{})
+	}
+
+	return c
+}
+
+func loadSubnets(t *testing.T) []*ec2.Subnet {
+	c := make([]*ec2.Subnet, count)
+
+	for i := 0; i < count; i++ {
+		c = append(c, &ec2.Subnet{})
 	}
 
 	return c
