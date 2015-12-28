@@ -2,13 +2,14 @@ package awscan
 
 import (
 	"encoding/json"
+	"os"
+	"testing"
+
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/stretchr/testify/assert"
-	"os"
-	"testing"
 )
 
 const (
@@ -20,7 +21,6 @@ type testScanner struct {
 	securityGroups    []*ec2.SecurityGroup
 	loadBalancers     []*elb.LoadBalancerDescription
 	dbInstances       []*rds.DBInstance
-	dbSecurityGroups  []*rds.DBSecurityGroup
 	autoscalingGroups []*autoscaling.Group
 	routeTables       []*ec2.RouteTable
 	subnets           []*ec2.Subnet
@@ -84,10 +84,6 @@ func (ts *testScanner) ScanRDS() ([]*rds.DBInstance, error) {
 	return ts.dbInstances, nil
 }
 
-func (ts *testScanner) ScanRDSSecurityGroups() ([]*rds.DBSecurityGroup, error) {
-	return ts.dbSecurityGroups, nil
-}
-
 func (ts *testScanner) ScanAutoScalingGroups() ([]*autoscaling.Group, error) {
 	return ts.autoscalingGroups, nil
 }
@@ -98,16 +94,6 @@ func (ts *testScanner) ScanRouteTables() ([]*ec2.RouteTable, error) {
 
 func (ts *testScanner) ScanSubnets() ([]*ec2.Subnet, error) {
 	return ts.subnets, nil
-}
-
-func loadRdsSecurityGroups(t *testing.T) []*rds.DBSecurityGroup {
-	c := make([]*rds.DBSecurityGroup, count)
-
-	for i := 0; i < count; i++ {
-		c = append(c, &rds.DBSecurityGroup{})
-	}
-
-	return c
 }
 
 func loadRdsInstances(t *testing.T) []*rds.DBInstance {

@@ -18,7 +18,8 @@ type EC2Scanner interface {
 	GetLoadBalancer(string) (*elb.LoadBalancerDescription, error)
 	ScanLoadBalancers() ([]*elb.LoadBalancerDescription, error)
 	ScanRDS() ([]*rds.DBInstance, error)
-	ScanRDSSecurityGroups() ([]*rds.DBSecurityGroup, error)
+	GetRDSInstance(string) ([]*rds.DBInstance, error)
+	ScanRDSClusters() ([]*rds.DBClusters, error)
 	ScanAutoScalingGroups() ([]*autoscaling.Group, error)
 	ScanRouteTables() ([]*ec2.RouteTable, error)
 	ScanSubnets() ([]*ec2.Subnet, error)
@@ -175,13 +176,26 @@ func (s *eC2ScannerImpl) ScanRDS() ([]*rds.DBInstance, error) {
 	return resp.DBInstances, nil
 }
 
-func (s *eC2ScannerImpl) ScanRDSSecurityGroups() ([]*rds.DBSecurityGroup, error) {
+func (s *eC2ScannerImpl) GetRDSInstance(instanceIdentifier string) ([]*rds.DBInstance, error) {
 	client := s.getRDSClient()
-	resp, err := client.DescribeDBSecurityGroups(nil)
+	input := &rds.DescribeDBInstancesInput{
+		DBInstanceIdentifier: aws.String(instanceIdentifier),
+	}
+	resp, err := client.DescribeDBInstances(input)
 	if err != nil {
 		return nil, err
 	}
-	return resp.DBSecurityGroups, nil
+	return resp.DBInstances, nil
+}
+
+// TODO(dan) this for amazon aurora clusters.  not available in all regions
+func (s *eC2ScannerImpl) ScanRDSClusters() ([]*rds.DBCluster, error) {
+	client := s.getRDSClient()
+	resp, err := client.DescribeDBClusters(nil)
+	if err != nil {
+		return nil, err
+	}
+	return resp.DBClusters, nil
 }
 
 func (s *eC2ScannerImpl) ScanAutoScalingGroups() ([]*autoscaling.Group, error) {

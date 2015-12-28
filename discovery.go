@@ -28,7 +28,7 @@ const (
 	InstanceType         = "Instance"
 	DBInstanceType       = "DBInstance"
 	SecurityGroupType    = "SecurityGroup"
-	DBSecurityGroupType  = "DBSecurityGroup"
+	DBClusterGroupType   = "DBCluster"
 	AutoScalingGroupType = "AutoScalingGroup"
 	LoadBalancerType     = "LoadBalancerDescription"
 	SubnetType           = "Subnet"
@@ -59,7 +59,7 @@ func (d *discoverer) Discover() <-chan Event {
 	d.doScan(d.scanSubnets)
 	d.doScan(d.scanLoadBalancers)
 	d.doScan(d.scanRDS)
-	d.doScan(d.scanRDSSecurityGroups)
+	d.doScan(d.scanRDSInstances)
 	d.doScan(d.scanSecurityGroups)
 	d.doScan(d.scanAutoScalingGroups)
 
@@ -117,18 +117,6 @@ func (d *discoverer) scanRDS() {
 		for _, rdsInst := range rdses {
 			if rdsInst != nil {
 				d.discoChan <- Event{rdsInst, nil}
-			}
-		}
-	}
-}
-
-func (d *discoverer) scanRDSSecurityGroups() {
-	if rdssgs, err := d.sc.ScanRDSSecurityGroups(); err != nil {
-		d.discoChan <- Event{nil, &DiscoveryError{err, DBSecurityGroupType}}
-	} else {
-		for _, rdssg := range rdssgs {
-			if rdssg != nil {
-				d.discoChan <- Event{rdssg, nil}
 			}
 		}
 	}
